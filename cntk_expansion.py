@@ -1,4 +1,4 @@
-import autograd
+from autograd import grad, jacobian, elementwise_grad
 import autograd.numpy as np
 from cntk.ops.functions import UserFunction
 from cntk import output_variable
@@ -16,16 +16,13 @@ class MySigmoid(UserFunction):
     def __init__(self, arg, name='MySigmoid'):
         super(MySigmoid, self).__init__([arg], name=name)
         self.sigmoid = lambda x: 1 / (1 + np.exp(-x))
-        self.grad = autograd.grad(self.sigmoid)
+        self.grad = grad(self.sigmoid)
 
     def forward(self, argument, device=None, outputs_to_retain=None):
-        # sigmoid_x = 1 / (1 + np.exp(-argument))
-        # return argument, sigmoid_x
         return argument, self.sigmoid(argument)
 
     def backward(self, state, root_gradients):
         argument = state
-        # return root_gradients * autosigmoid_x * (1 - sigmoid_x)
         return root_gradients * self.grad(argument)
 
     def infer_outputs(self):
@@ -35,9 +32,6 @@ class MySigmoid(UserFunction):
     @staticmethod
     def deserialize(inputs, name, state):
         return MySigmoid(inputs[0], name)
-
-# a = C.input_variable(1)
-# s = user_function(MySigmoid(a))
 
 from autograd.scipy.stats import multivariate_normal
 class _CNTK_mvn_pdf_(UserFunction):
@@ -51,9 +45,9 @@ class _CNTK_mvn_pdf_(UserFunction):
         #                 (X.transpose(0, 2, 1))) / 2) / sqrt_det_2pi_sig
         # self.mvn_pdf = mvn_pdf
         self.mvn_pdf = multivariate_normal.pdf
-        self.grad = autograd.grad(self.mvn_pdf)
-        # self.grad = autograd.elementwise_grad(self.mvn_pdf)
-        # self.grad = autograd.jacobian(self.mvn_pdf)
+        self.grad = grad(self.mvn_pdf)
+        # self.grad = elementwise_grad(self.mvn_pdf)
+        # self.grad = jacobian(self.mvn_pdf)
 
     def forward(self, arguments, device=None, outputs_to_retain=None):
         X, loc, scale = arguments
@@ -88,10 +82,7 @@ def __CNTK_mvn_pdf__(mu, sig):
 C.mvn_pdf = __CNTK_mvn_pdf__
 
 if __name__ == '__main__':
-    # z = C.mvn_pdf(C.constant([[0,0]]),C.constant([[1,0],[0,1]]))
-    # q = z(C.input_variable(2, needs_gradient=True))
     q = C.mvn_pdf(C.constant([0,0]),C.constant([[1,0],[0,1]]))(C.input_variable(2, needs_gradient=True))
 
-    # q = C.user_function(_CNTK_mvn_pdf_(C.input_variable((2),needs_gradient=True),C.constant([0,0]),C.constant([[1,0],[0,1]])))
     q.eval({q.arguments[0]:np.random.normal(size=(100,2))})
     q.grad({q.arguments[0]:np.random.normal(size=(100,2))})
