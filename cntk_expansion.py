@@ -33,6 +33,31 @@ class MySigmoid(UserFunction):
     def deserialize(inputs, name, state):
         return MySigmoid(inputs[0], name)
 
+class _CNTK_det_(UserFunction):
+    def __init__(self, arg, name='_CNTK_det_'):
+        super(_CNTK_det_, self).__init__([arg], name=name)
+        self.det = lambda x: LA.det(x)
+        self.grad = grad(self.det)
+
+    def forward(self, argument, device=None, outputs_to_retain=None):
+        return argument, self.det(argument)
+
+    def backward(self, state, root_gradients):
+        argument = state
+        return root_gradients * self.grad(argument)
+
+    def infer_outputs(self):
+        return [output_variable((), self.inputs[0].dtype,
+            self.inputs[0].dynamic_axes)]
+
+    @staticmethod
+    def deserialize(inputs, name, state):
+        return _CNTK_det_(inputs[0], name)
+
+def __CNTK_det__(X):
+    return C.user_function(_CNTK_det_(X))
+C.det = __CNTK_det__
+
 from autograd.scipy.stats import multivariate_normal
 class _CNTK_mvn_pdf_(UserFunction):
     def __init__(self, X, loc, scale, name='_CNTK_mvn_pdf_'):
@@ -45,8 +70,8 @@ class _CNTK_mvn_pdf_(UserFunction):
         #                 (X.transpose(0, 2, 1))) / 2) / sqrt_det_2pi_sig
         # self.mvn_pdf = mvn_pdf
         self.mvn_pdf = multivariate_normal.pdf
-        self.grad = grad(self.mvn_pdf)
-        # self.grad = elementwise_grad(self.mvn_pdf)
+        # self.grad = grad(self.mvn_pdf)
+        self.grad = elementwise_grad(self.mvn_pdf)
         # self.grad = jacobian(self.mvn_pdf)
 
     def forward(self, arguments, device=None, outputs_to_retain=None):
@@ -86,3 +111,10 @@ if __name__ == '__main__':
 
     q.eval({q.arguments[0]:np.random.normal(size=(100,2))})
     q.grad({q.arguments[0]:np.random.normal(size=(100,2))})
+
+    C.det(C.constant([[1,0],[0,1]])).eval()
+
+    C.det(C.constant([[1,0],[0,1]]))
+    q = C.det(C.input_variable((2,2),needs_gradient=True))
+    q.eval({q.arguments[0]:np.array([[1,0],[0,1]],np.float32)})
+    q.grad({q.arguments[0]:np.array([[1,0],[0,1]],np.float32)})
