@@ -1,12 +1,14 @@
 #%%
-import numpy as np
-import matplotlib.pyplot as plt
 import cntk as C
+import matplotlib.pyplot as plt
+import numpy as np
+
 import cntk_expansion
+from cntk_distribution import MultivariateNormalDiag
 
 #%%
 K = 16
-eps = 1e-7
+EPS = 1e-7
 
 #%%
 def true_density(z):
@@ -21,22 +23,7 @@ def true_density(z):
 h = lambda x: C.tanh(x)
 h_prime = lambda x: 1 - C.square(C.tanh(x))
 
-class MultivariateNormalDiag():
-    def __init__ (self, loc, scale_diag):
-        self.loc = np.array(loc)
-        self.scale = np.array(scale_diag) * np.eye(self.loc.shape[0])
-
-        self.loc, self.scale = self.loc.astype(np.float32), self.scale.astype(np.float32)
-        self.shape = self.loc.shape
-        self.mvn_pdf = C.mvn_pdf(C.constant(self.loc,name='loc'), C.constant(self.scale,name='scale'))
-    def size(self):
-        return self.loc.shape
-    def sample(self, count):
-        return np.random.multivariate_normal(self.loc,self.scale, count)
-    def pdf(self, X):
-        return self.mvn_pdf(X)
-
-base_dist = MultivariateNormalDiag(loc=[0.,0.], scale_diag=[1., 1.])
+base_dist = MultivariateNormalDiag(loc=[0., 0.], scale_diag=[1., 1.])
 z_0 = C.input_variable(base_dist.size(), name='sampled')
 z_prev = z_0
 sum_log_det_jacob = 0.
@@ -47,22 +34,22 @@ for i in range(K):
     w = C.parameter((2), name='w', init=initializer)
     b = C.parameter((1), name='b', init=initializer)
 
-    psi = h_prime(C.dot(w,z_prev)+b) * w
-    det_jacob = C.abs(1 + C.dot(u,psi))
-    
-    sum_log_det_jacob += C.log(eps + det_jacob)
-    z_prev = z_prev + u * h(C.dot(w,z_prev)+b)
+    psi = h_prime(C.dot(w, z_prev)+b) * w
+    det_jacob = C.abs(1 + C.dot(u, psi))
+
+    sum_log_det_jacob += C.log(EPS + det_jacob)
+    z_prev = z_prev + u * h(C.dot(w, z_prev)+b)
 
 z_k = z_prev
 log_q_k = C.log(base_dist.pdf(z_0)) - sum_log_det_jacob
-log_p = C.log(eps + true_density(z_k))
+log_p = C.log(EPS + true_density(z_k))
 
 kl = C.reduce_mean(log_q_k - log_p)
 #%%
 lr = 10
 lr_schedule = C.learning_parameter_schedule(lr)
-learner = C.adam(kl.parameters,lr_schedule,0.9)
-trainer = C.Trainer(kl,(kl,None),learner)
+learner = C.adam(kl.parameters, lr_schedule, 0.9)
+trainer = C.Trainer(kl, (kl, None), learner)
 
 #%%
 for i in range(1, 2000 + 1):
