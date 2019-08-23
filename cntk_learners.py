@@ -35,7 +35,6 @@ class RAdam(UserLearner):
             state = self.state[p]
 
             if len(state) == 0:
-                print('new state')
                 state['step'] = 0
                 state['exp_avg'] = C.Constant(C.zeros_like(p).eval())
                 state['exp_avg_sq'] = C.Constant(C.zeros_like(p).eval())
@@ -85,15 +84,16 @@ def my_adagrad(parameters, gradients):
         update_funcs.append(C.assign(p, p - 0.01 * g / C.sqrt(accum_new + 1e-6)))
     return C.combine(update_funcs)
 
-a = C.input_variable(1)
-b = C.layers.Dense(2)(a)
-loss = C.reduce_mean(C.square(b))
+if __name__ == '__main__':
+    a = C.input_variable(1)
+    b = C.layers.Dense(2)(a)
+    loss = C.reduce_mean(C.square(b))
 
-# trainer = C.Trainer(b, (loss, None), C.universal(my_adagrad, b.parameters))
-# trainer = C.Trainer(b, (loss, None), MySgd(b.parameters, C.learning_parameter_schedule(0.01)))
-trainer = C.Trainer(b, (loss, None), RAdam(b.parameters, C.learning_parameter_schedule(0.01))) #, 0.9, 0.999))
-# trainer = C.Trainer(b, (loss, None), C.sgd(b.parameters, C.learning_parameter_schedule(0.01)))
+    # trainer = C.Trainer(b, (loss, None), C.universal(my_adagrad, b.parameters))
+    # trainer = C.Trainer(b, (loss, None), MySgd(b.parameters, C.learning_parameter_schedule(0.01)))
+    trainer = C.Trainer(b, (loss, None), RAdam(b.parameters, C.learning_parameter_schedule(0.01))) #, 0.9, 0.999))
+    # trainer = C.Trainer(b, (loss, None), C.sgd(b.parameters, C.learning_parameter_schedule(0.01)))
 
-count = 100
-for i in range(count):
-    print(f'i({i}/{count}):{trainer.train_minibatch({a:np.array([[1.0]])}, outputs=[loss])[1][loss]}')
+    count = 100
+    for i in range(count):
+        print(f'i({i}/{count}):{trainer.train_minibatch({a:np.array([[1.0]])}, outputs=[loss])[1][loss]}')
