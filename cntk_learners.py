@@ -85,15 +85,28 @@ def my_adagrad(parameters, gradients):
     return C.combine(update_funcs)
 
 if __name__ == '__main__':
-    a = C.input_variable(1)
-    b = C.layers.Dense(2)(a)
-    loss = C.reduce_mean(C.square(b))
+    # XOR test
+    _input = C.input_variable(2)
+    _hidden = C.layers.Dense(2,activation=C.sigmoid)(_input)
+    _output = C.layers.Dense(1,activation=C.sigmoid)(_hidden)
 
-    # trainer = C.Trainer(b, (loss, None), C.universal(my_adagrad, b.parameters))
-    # trainer = C.Trainer(b, (loss, None), MySgd(b.parameters, C.learning_parameter_schedule(0.01)))
-    trainer = C.Trainer(b, (loss, None), RAdam(b.parameters, C.learning_parameter_schedule(0.01))) #, 0.9, 0.999))
-    # trainer = C.Trainer(b, (loss, None), C.sgd(b.parameters, C.learning_parameter_schedule(0.01)))
+    _target = C.input_variable(1)
+
+    data = np.array([[0,0],[1,0],[0,1],[1,1]], np.float32)
+    target = np.array([[0],[1],[1],[0]], np.float32)
+
+    loss = C.reduce_mean(C.square(_output-_target))
+
+    model = _output
+
+    # trainer = C.Trainer(model, (loss, None), C.universal(my_adagrad, model.parameters))
+    # trainer = C.Trainer(model, (loss, None), MySgd(model.parameters, C.learning_parameter_schedule(1)))
+    trainer = C.Trainer(model, (loss, None), RAdam(model.parameters, C.learning_parameter_schedule(1))) #, 0.9, 0.999))
+    # trainer = C.Trainer(model, (loss, None), C.sgd(model.parameters, C.learning_parameter_schedule(1)))
+    # trainer = C.Trainer(model, (loss, None), C.adam(model.parameters, C.learning_parameter_schedule(1), C.momentum_schedule(0.999)))
 
     count = 100
     for i in range(count):
-        print(f'i({i}/{count}):{trainer.train_minibatch({a:np.array([[1.0]])}, outputs=[loss])[1][loss]}')
+        # print(f'i({i}/{count}):{trainer.train_minibatch({a:np.array([[1.0]])}, outputs=[loss])[1][loss]}')
+        l = trainer.train_minibatch({_input:data, _target:target}, outputs=[loss])[1][loss]
+        print(f'i({i}/{count}):{np.mean(l)}')
