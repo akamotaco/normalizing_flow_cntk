@@ -1,20 +1,24 @@
 #%%
 import numpy as np
+from scipy.stats import special_ortho_group
 import cntk as C
 
 #%%
 def _linear(x):
     return x
 
-def KLF_forward(input_shape: tuple, act_func_pair: tuple = (_linear, _linear), batch_norm: bool = False):
+def KLF_forward(input_dim: int, act_func_pair: tuple = (_linear, _linear), batch_norm: bool = False):
     chunk = {}
 
-    chunk['input_shape'] = input_shape
-    _ph = C.placeholder(input_shape, name='place_holder')
+    chunk['input_dim'] = input_dim
+    _ph = C.placeholder(input_dim, name='place_holder')
 
-    _l = C.layers.Dense(input_shape, name='dense')(_ph)
+    _l = C.layers.Dense(input_dim, name='dense')(_ph)
     chunk['W'] = _l.parameters[0]
     chunk['b'] = _l.parameters[1]
+
+    random_rotation_matrix = special_ortho_group.rvs(input_dim)
+    chunk['W'].value = random_rotation_matrix
 
     if batch_norm:
         _bn = C.layers.BatchNormalization(name='batch_norm')(_ph)
@@ -28,8 +32,8 @@ def KLF_forward(input_shape: tuple, act_func_pair: tuple = (_linear, _linear), b
     return _out, chunk
 
 def KLF_reverse(chunk):
-    input_shape = chunk['input_shape']
-    _ph = C.placeholder(input_shape, name='place_holder')
+    input_dim = chunk['input_dim']
+    _ph = C.placeholder(input_dim, name='place_holder')
 
     inv_act_func = chunk['inv_act_func']
     _out = inv_act_func(_ph)
@@ -48,10 +52,10 @@ def KLF_reverse(chunk):
     return _out
 
 #%%
-c_shape = (2)
-c_input = C.input_variable(c_shape)
+c_dim = 2
+c_input = C.input_variable(c_dim)
 
-c_block = KLF_forward(c_shape, batch_norm=True)
+c_block = KLF_forward(c_dim, batch_norm=True)
 
 
 
