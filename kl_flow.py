@@ -2,6 +2,7 @@
 import numpy as np
 from scipy.stats import special_ortho_group
 import cntk as C
+import cntk_expansion
 
 #%%
 def _linear(x):
@@ -52,16 +53,46 @@ def KLF_reverse(chunk):
     return _out
 
 #%%
+# https://stats.stackexchange.com/questions/60680/kl-divergence-between-two-multivariate-gaussians
+
+def multivariate_kl_divergence(input_layer):
+    _dim = input_layer.shape[0]
+
+
+    out_value = C.unpack_batch(input_layer)
+    _mu1 = C.transpose(C.reduce_mean(out_value, axis=0), [1,0])
+
+    _mu2 = C.zeros_like(_mu1)
+    _sigma2 = C.Constant(np.eye(_dim))
+    _sigma2_inv = _sigma2 # identity matrix
+    
+    return 0.5  * (
+                    #    log(|_sigma2|/|_simga1|)
+                    -_dim
+                    #    +tr{_sigma2_inv@_simga1}}
+                    + C.transpose((_mu2-_mu1), [1,0])@_sigma2_inv@(_mu2-_mu1)
+                    )
+
+#%%
 c_dim = 2
-c_input = C.input_variable(c_dim)
+c_input = C.input_variable(c_dim, needs_gradient=True)
 
 c_block = KLF_forward(c_dim, batch_norm=True)
 
 
+single = np.array([[1, 2]])
+# multi = np.random.uniform(size=(100, 2))
+multi = np.random.normal(size=(100, 2))
+
+value = multi
 
 q = c_block[0](c_input)
-out = q.eval({q.arguments[0]:np.array([[1, 2]])})
+out = q.eval({q.arguments[0]:value})
 print(out)
+
+mkld = multivariate_kl_divergence(q)
+print(mkld.eval({mkld.arguments[0]:value}))
+mkld.grad({mkld.arguments[0]:value})
 
 
 #%%
@@ -69,6 +100,5 @@ print(out)
 c_inv_block = KLF_reverse(c_block[1])
 iq = c_inv_block(c_input)
 inv_out = iq.eval({iq.arguments[0]:out})
-print(out)
-print(inv_out)
+print(np.mean((value-inv_out)**2))
 #%%
