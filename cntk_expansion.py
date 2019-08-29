@@ -47,7 +47,7 @@ def __cntk_trace__(m):
 
     _dim = m.shape[0]
     _identity_matrix = C.Constant(np.eye(_dim))
-    return C.reduce_sum(m@_identity_matrix)
+    return C.reduce_sum(m*_identity_matrix)
 C.trace = __cntk_trace__
 
 class __cntk_class_det__(UserFunction):
