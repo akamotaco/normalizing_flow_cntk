@@ -39,6 +39,47 @@ def __cntk_cov2__(m):
     return fact * C.squeeze(m@mt)
 C.cov2 = __cntk_cov2__
 
+def __cntk_trace__(m):
+    if len(m.shape) != 2:
+        raise RuntimeError(f'{m.shape} is not 2 dims')
+    if m.shape[0] != m.shape[1]:
+        raise RuntimeError(f'{m.shape} is different size')
+
+    _dim = m.shape[0]
+    _identity_matrix = C.Constant(np.eye(_dim))
+    return C.reduce_sum(m@_identity_matrix)
+C.trace = __cntk_trace__
+
+class __cntk_class_det__(UserFunction):
+    def __init__(self, arg, name:str='__cntk_class_det__'):
+        super(__cntk_class_det__, self).__init__([arg], name=name)
+
+        func = 'elementwise_grad' # 'elementwise_grad' # 'jacobian' #
+        if func == 'grad':
+            func = grad
+        elif func == 'elementwise_grad':
+            func = elementwise_grad
+        elif func == 'jacobian':
+            func = jacobian
+        self.grad = func(np.linalg.det)
+    
+    def forward(self, argument, device=None, output_to_retain=None):
+        return argument, np.linalg.det(argument)
+    
+    def backward(self, state, root_gradients):
+        arg = state
+        return root_gradients.reshape(root_gradients.shape+(1,1)) * self.grad(arg)
+
+    def infer_outputs(self):
+        return [output_variable((), self.inputs[0].dtype, self.inputs[0].dynamic_axes)]
+    
+    @staticmethod
+    def deserialize(inputs, name, state):
+        return __cntk_class_det__(inputs[0], name)
+def __cntk_det__(m):
+    return C.user_function(__cntk_class_det__(m))
+C.det = __cntk_det__
+
 # class MySigmoid(UserFunction):
 #     def __init__(self, arg, name='MySigmoid'):
 #         super(MySigmoid, self).__init__([arg], name=name)
@@ -71,7 +112,7 @@ class __cntk_class_mvn_pdf__(UserFunction):
         # self.mvn_pdf = mvn_pdf
         self.mvn_pdf = multivariate_normal.pdf
 
-        func = 'grad' # 'elementwise_grad' # 'jacobian' #
+        func = 'elementwise_grad' # 'elementwise_grad' # 'jacobian' #
         if func == 'grad':
             self.grad = grad(self.mvn_pdf)
         elif func == 'elementwise_grad':

@@ -4,6 +4,13 @@ from scipy.stats import special_ortho_group
 import cntk as C
 import cntk_expansion
 
+# z = C.Constant(np.array([[1,0],[0,1]]))
+# C.det(z).eval()
+
+# x = C.det(C.input_variable((2,2),needs_gradient=True))
+# x.eval({x.arguments[0]:np.array([[[1,1],[0,1]]]*10)})
+# x.grad({x.arguments[0]:np.array([[[1,1],[0,1]]]*10)})
+
 #%%
 def _linear(x):
     return x
@@ -60,17 +67,18 @@ def multivariate_kl_divergence(input_layer):
 
 
     out_value = C.unpack_batch(input_layer)
-    _mu1 = C.transpose(C.reduce_mean(out_value, axis=0), [1,0])
+    _mu1 = C.transpose(C.reduce_mean(out_value, axis=0), [1, 0])
+    _sigma1 = C.cov2(input_layer)
 
     _mu2 = C.zeros_like(_mu1)
     _sigma2 = C.Constant(np.eye(_dim))
     _sigma2_inv = _sigma2 # identity matrix
     
     return 0.5  * (
-                    #    log(|_sigma2|/|_simga1|)
-                    -_dim
-                    #    +tr{_sigma2_inv@_simga1}}
-                    + C.transpose((_mu2-_mu1), [1,0])@_sigma2_inv@(_mu2-_mu1)
+                    C.log(C.det(_sigma2)/C.det(_sigma1))
+                    - _dim
+                    + C.trace(_sigma1@_sigma2)
+                    + C.transpose((_mu2-_mu1), [1, 0])@_sigma2_inv@(_mu2-_mu1)
                     )
 
 #%%
