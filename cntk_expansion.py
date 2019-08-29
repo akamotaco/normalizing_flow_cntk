@@ -68,7 +68,7 @@ class __cntk_class_det__(UserFunction):
     
     def backward(self, state, root_gradients):
         arg = state
-        return root_gradients.reshape(root_gradients.shape+(1,1)) * self.grad(arg)
+        return root_gradients.reshape(root_gradients.shape+(1,1)) * np.ascontiguousarray(self.grad(arg))
 
     def infer_outputs(self):
         return [output_variable((), self.inputs[0].dtype, self.inputs[0].dynamic_axes)]
