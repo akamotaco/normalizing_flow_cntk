@@ -90,16 +90,22 @@ c_dim = 2
 c_input = C.input_variable(c_dim, needs_gradient=True)
 
 # c_block = KLF_forward(c_dim, batch_norm=True)
-c_block = KLF_forward(c_dim, batch_norm=True, act_func_pair=(_leaky_relu, _leaky_relu_inv))
+c_block = []
+for i in range(3):
+    c_block.append(KLF_forward(c_dim, batch_norm=True, act_func_pair=(_linear, _linear)))
+    # c_block.append(KLF_forward(c_dim, batch_norm=True, act_func_pair=(_leaky_relu, _leaky_relu_inv)))
+    # c_block.append(KLF_forward(c_dim, batch_norm=True, act_func_pair=(C.tan, C.atan)))
 
 
 single = np.array([[1, 2]])
 # multi = np.random.uniform(size=(100, 2))
 multi = np.random.normal(size=(100, 2))
 
-value = multi
+value = multi.astype(np.float32)
 
-q = c_block[0](c_input)
+q = c_input
+for block in c_block:
+    q = block[0](q)
 out = q.eval({q.arguments[0]:value})
 print(out)
 
@@ -110,8 +116,9 @@ mkld.grad({mkld.arguments[0]:value})
 
 #%%
 
-c_inv_block = KLF_reverse(c_block[1])
-iq = c_inv_block(c_input)
+iq = c_input
+for block_inv in reversed(c_block):
+    iq = KLF_reverse(block_inv[1])(iq)
 inv_out = iq.eval({iq.arguments[0]:out})
 print(np.mean((value-inv_out)**2))
 iq.eval({iq.arguments[0]:out})
