@@ -61,10 +61,10 @@ class __cntk_class_det__(UserFunction):
             func = elementwise_grad
         elif func == 'jacobian':
             func = jacobian
-        self.grad = func(np.linalg.det)
+        self.grad = func(LA.det)
     
     def forward(self, argument, device=None, output_to_retain=None):
-        return argument, np.linalg.det(argument)
+        return argument, LA.det(argument)
     
     def backward(self, state, root_gradients):
         arg = state

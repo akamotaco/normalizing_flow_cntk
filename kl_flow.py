@@ -8,6 +8,18 @@ import cntk_expansion
 def _linear(x):
     return x
 
+def _leaky_relu(x):
+    alpha = 0.001
+    _upper = C.greater_equal(x, 0)*x
+    _lower = C.less(x, 0)*alpha*x
+    return _lower + _upper
+
+def _leaky_relu_inv(x):
+    alpha = 1/0.001
+    _upper = C.greater_equal(x, 0)*x
+    _lower = C.less(x, 0)*alpha*x
+    return _lower + _upper
+
 def KLF_forward(input_dim: int, act_func_pair: tuple = (_linear, _linear), batch_norm: bool = False):
     chunk = {}
 
@@ -77,7 +89,8 @@ def multivariate_kl_divergence(input_layer):
 c_dim = 2
 c_input = C.input_variable(c_dim, needs_gradient=True)
 
-c_block = KLF_forward(c_dim, batch_norm=True)
+# c_block = KLF_forward(c_dim, batch_norm=True)
+c_block = KLF_forward(c_dim, batch_norm=True, act_func_pair=(_leaky_relu, _leaky_relu_inv))
 
 
 single = np.array([[1, 2]])
