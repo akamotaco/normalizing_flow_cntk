@@ -14,62 +14,56 @@ def flow_forward(input_dim: int, act_func_pair: tuple = (None, None), batch_norm
     chunk = {}
     log_det_J = 0
 
-    _a = C.placeholder(input_dim, name='place_holder')
-    _b =  C.parameter(2)
-    _c = _b*_a
-
-    return _c, log_det_J, chunk
-
-#     chunk['input_dim'] = input_dim
-#     _ph = C.placeholder(input_dim, name='place_holder')
+    chunk['input_dim'] = input_dim
+    _ph = C.placeholder(input_dim, name='place_holder')
 
 
-#     if batch_norm:
-#         _bn = C.layers.BatchNormalization(name='batch_norm')(_ph)
-#         chunk['scale'] = _bn.parameters[0]
-#         chunk['bias'] = _bn.parameters[1]
-#         _ph = _bn
-#         # log_det_J += input_dim*C.reduce_sum(C.log(C.abs(chunk['scale'])))
+    if batch_norm:
+        _bn = C.layers.BatchNormalization(name='batch_norm')(_ph)
+        chunk['scale'] = _bn.parameters[0]
+        chunk['bias'] = _bn.parameters[1]
+        _ph = _bn
+        log_det_J += input_dim*C.reduce_sum(C.log(C.abs(chunk['scale'])))
 
-#     chunk['W_rot_mat'] = _W = C.parameter((input_dim, input_dim))
-#     _W.value = random_rotation_matrix = special_ortho_group.rvs(input_dim)
-#     _out = _ph@_W
-#     # log_det_J += input_dim*C.log(C.abs(C.det(_W)))
+    chunk['W_rot_mat'] = _W = C.parameter((input_dim, input_dim))
+    _W.value = random_rotation_matrix = special_ortho_group.rvs(input_dim)
+    _out = _ph@_W
+    log_det_J += input_dim*C.log(C.abs(C.det(_W)))
 
-#     _half_dim = input_dim//2
-#     _x1 = _out[:_half_dim]
-#     _x2 = _out[_half_dim]
+    _half_dim = input_dim//2
+    _x1 = _out[:_half_dim]
+    _x2 = _out[_half_dim]
 
-#     _log_s_func, _t_func = act_func_pair
-#     if _log_s_func is None: # basic network
-#         _log_s_func = C.layers.Sequential([
-#             C.layers.Dense(256, C.leaky_relu),
-#             C.layers.Dense(256, C.leaky_relu),
-#             C.layers.Dense(input_dim//2, C.tanh),
-#         ])#(C.placeholder(input_dim, name='place_holder'))
-#     if _t_func is None: # basic network
-#         _t_func = C.layers.Sequential([
-#             C.layers.Dense(256, C.leaky_relu),
-#             C.layers.Dense(256, C.leaky_relu),
-#             C.layers.Dense(input_dim//2),
-#         ])#(C.placeholder(input_dim, name='place_holder'))
+    _log_s_func, _t_func = act_func_pair
+    if _log_s_func is None: # basic network
+        _log_s_func = C.layers.Sequential([
+            C.layers.Dense(256, C.leaky_relu),
+            C.layers.Dense(256, C.leaky_relu),
+            C.layers.Dense(input_dim//2, C.tanh),
+        ])#(C.placeholder(input_dim, name='place_holder'))
+    if _t_func is None: # basic network
+        _t_func = C.layers.Sequential([
+            C.layers.Dense(256, C.leaky_relu),
+            C.layers.Dense(256, C.leaky_relu),
+            C.layers.Dense(input_dim//2),
+        ])#(C.placeholder(input_dim, name='place_holder'))
 
-#     chunk['log_s_func'] = _log_s_func
-#     chunk['t_func'] = _t_func
+    chunk['log_s_func'] = _log_s_func
+    chunk['t_func'] = _t_func
 
-#     _log_s, _t = _log_s_func(_x2), _t_func(_x2)
+    _log_s, _t = _log_s_func(_x2), _t_func(_x2)
 
-#     _s = C.exp(_log_s)
+    _s = C.exp(_log_s)
 
-#     _y1 = _x1*_s + _t
-#     _y2 = _x2
+    _y1 = _x1*_s + _t
+    _y2 = _x2
 
-#     _Y = C.splice(_y1, _y2)
-#     chunk['output'] = _Y
+    _Y = C.splice(_y1, _y2)
+    chunk['output'] = _Y
 
-#     # log_det_J += C.reduce_sum(C.log(C.abs(_s)))
+    log_det_J += C.reduce_sum(C.log(C.abs(_s)))
 
-#     return _Y, log_det_J, chunk
+    return _Y, log_det_J, chunk
 
 # def flow_reverse(chunk):
 #     input_dim = chunk['input_dim']
@@ -141,30 +135,30 @@ q = c_input*a
 # def _atan(x):
 #     return C.atan(x)*5
 
-# # c_block = KLF_forward(c_dim, batch_norm=True)
-# c_block = []
-# for i in range(1):
-#     c_block.append(flow_forward(c_dim, batch_norm=False))
+# c_block = KLF_forward(c_dim, batch_norm=True)
+c_block = []
+for i in range(1):
+    c_block.append(flow_forward(c_dim, batch_norm=False))
 
-# single = np.array([[1, 2]])
-# # multi = np.random.uniform(size=(100, 2))
-# multi = np.random.normal(size=(100, 2))
+single = np.array([[1, 2]])
+# multi = np.random.uniform(size=(100, 2))
+multi = np.random.normal(size=(100, 2))
 
-# value = multi.astype(np.float32)
+value = multi.astype(np.float32)
 
-# q = c_input
-# log_det_J = C.zeros_like(c_dim)
-# for block in c_block:
-    # log_det_J += block[1](q)
-    # q = block[0](q)
-# out = q.eval({q.arguments[0]:value})
-# print(out)
+q = c_input
+log_det_J = C.zeros_like(c_dim)
+for block in c_block:
+    log_det_J += block[1](q)
+    q = block[0](q)
+out = q.eval({q.arguments[0]:value})
+print(out)
 
 base_dist = MultivariateNormalDiag(loc=[0., 0.], scale_diag=[1., 1.])
 
 # log_q_k = C.log(base_dist.pdf(z_0)) - sum_log_det_jacob
 
-loss = C.reduce_mean(C.log(base_dist.pdf(c_input))) # - log_det_J)
+loss = C.reduce_mean(C.log(base_dist.pdf(c_input)) - log_det_J)
 
 # mkld = multivariate_kl_divergence(q)
 # print(mkld.eval({mkld.arguments[0]:value}))
@@ -182,18 +176,19 @@ loss = C.reduce_mean(C.log(base_dist.pdf(c_input))) # - log_det_J)
 
 
 lr_rate = 0.01
-learner = C.adam(q.parameters, C.learning_parameter_schedule(lr_rate), C.momentum_schedule(0.99))
-trainer = C.Trainer(q,(loss,None),[learner])
+learner = C.adam(loss.parameters, C.learning_parameter_schedule(lr_rate), C.momentum_schedule(0.99))
+trainer = C.Trainer(q, (loss, None), [learner])
 
 for i in tqdm(range(10)):
     v = np.random.uniform(size=(1,2))
-    # v = noisy_moons
+    v = noisy_moons
     trainer.train_minibatch({q.arguments[0]:v})
-    # if i%100 == 0:
-        # print(trainer.previous_minibatch_loss_average)
+    if i%100 == 0:
+        print(trainer.previous_minibatch_loss_average)
 
 import matplotlib.pyplot as plt
-vv = np.random.uniform(size=(1000,2))
+# vv = np.random.uniform(size=(1000,2))
+vv = noisy_moons
 plt.scatter(vv[:,0], vv[:,1]);plt.show()
 x = q.eval({q.arguments[0]:vv})
 plt.scatter(x[:,0], x[:,1]);plt.show()
