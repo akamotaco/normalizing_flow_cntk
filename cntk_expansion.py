@@ -112,7 +112,7 @@ class __cntk_class_mvn_pdf__(UserFunction):
         # self.mvn_pdf = mvn_pdf
         self.mvn_pdf = multivariate_normal.pdf
 
-        func = 'elementwise_grad' # 'elementwise_grad' # 'jacobian' #
+        func = 'elementwise_grad' # 'grad' # 'jacobian' #
         if func == 'grad':
             self.grad = grad(self.mvn_pdf)
         elif func == 'elementwise_grad':
