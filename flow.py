@@ -16,7 +16,7 @@ def flow_forward(input_dim: int, act_func_pair: tuple = (None, None), batch_norm
 
     chunk['input_dim'] = input_dim
     _ph = C.placeholder(input_dim, name='place_holder')
-
+    _out = _ph
 
     if batch_norm:
         _bn = C.layers.BatchNormalization(name='batch_norm')(_ph)
@@ -28,24 +28,25 @@ def flow_forward(input_dim: int, act_func_pair: tuple = (None, None), batch_norm
     chunk['W_rot_mat'] = _W = C.parameter((input_dim, input_dim))
     _W.value = random_rotation_matrix = special_ortho_group.rvs(input_dim)
     _out = _ph@_W
-    log_det_J += input_dim*C.log(C.abs(C.det(_W)))
-
+    # log_det_J += input_dim*C.log(C.abs(C.det(_W)))
+    log_det_J += input_dim*C.slogdet(_W)[1]
+    
     _half_dim = input_dim//2
     _x1 = _out[:_half_dim]
-    _x2 = _out[_half_dim]
+    _x2 = _out[_half_dim:]
 
     _log_s_func, _t_func = act_func_pair
     if _log_s_func is None: # basic network
         _log_s_func = C.layers.Sequential([
             C.layers.Dense(256, C.leaky_relu),
             C.layers.Dense(256, C.leaky_relu),
-            C.layers.Dense(input_dim//2, C.tanh),
+            C.layers.Dense(_half_dim, C.tanh),
         ])#(C.placeholder(input_dim, name='place_holder'))
     if _t_func is None: # basic network
         _t_func = C.layers.Sequential([
             C.layers.Dense(256, C.leaky_relu),
             C.layers.Dense(256, C.leaky_relu),
-            C.layers.Dense(input_dim//2),
+            C.layers.Dense(_half_dim),
         ])#(C.placeholder(input_dim, name='place_holder'))
 
     chunk['log_s_func'] = _log_s_func
@@ -61,7 +62,7 @@ def flow_forward(input_dim: int, act_func_pair: tuple = (None, None), batch_norm
     _Y = C.splice(_y1, _y2)
     chunk['output'] = _Y
 
-    log_det_J += C.reduce_sum(C.log(C.abs(_s)))
+    log_det_J += C.reduce_sum(_log_s)
 
     return _Y, log_det_J, chunk
 
@@ -122,12 +123,7 @@ def flow_forward(input_dim: int, act_func_pair: tuple = (None, None), batch_norm
 
 #%%
 c_dim = 2
-c_input = C.input_variable(c_dim, needs_gradient=True)
-
-a = C.parameter(2)
-a.value = np.array([1,2])
-
-q = c_input*a
+c_input = C.input_variable(c_dim)
 
 # def _tan(x):
 #     return C.tan(x/5)
@@ -137,32 +133,30 @@ q = c_input*a
 
 # c_block = KLF_forward(c_dim, batch_norm=True)
 c_block = []
-for i in range(1):
+for i in range(6):
     c_block.append(flow_forward(c_dim, batch_norm=False))
 
-single = np.array([[1, 2]])
-# multi = np.random.uniform(size=(100, 2))
-multi = np.random.normal(size=(100, 2))
+# single = np.array([[1, 2]])
+# # multi = np.random.uniform(size=(100, 2))
+# multi = np.random.normal(size=(100, 2))
 
-value = multi.astype(np.float32)
+# value = multi.astype(np.float32)
 
 q = c_input
-log_det_J = C.zeros_like(c_dim)
+log_det_J = C.Constant(0)
 for block in c_block:
     log_det_J += block[1](q)
     q = block[0](q)
-out = q.eval({q.arguments[0]:value})
-print(out)
 
 base_dist = MultivariateNormalDiag(loc=[0., 0.], scale_diag=[1., 1.])
 
 # log_q_k = C.log(base_dist.pdf(z_0)) - sum_log_det_jacob
 
-loss = C.reduce_mean(C.log(base_dist.pdf(c_input)) - log_det_J)
+loss = -C.reduce_mean(C.log(base_dist.pdf(q)) + log_det_J)
 
 # mkld = multivariate_kl_divergence(q)
 # print(mkld.eval({mkld.arguments[0]:value}))
-# mkld.grad({mkld.arguments[0]:value})
+# mkld.grad({mkld.arguments[0]:value})1
 # loss = (mkld)
 
 # _q_prime = C.tanh(q)
@@ -173,18 +167,20 @@ loss = C.reduce_mean(C.log(base_dist.pdf(c_input)) - log_det_J)
 # # _log_mu = C.reduce_mean(C.log(C.abs(q)), axis=C.Axis.default_batch_axis())
 # # loss += C.reduce_mean(C.square(_log_mu+0.57))
 
+from IPython import embed;embed()
+exit()
 
 
-lr_rate = 0.01
+lr_rate = 1e-2
 learner = C.adam(loss.parameters, C.learning_parameter_schedule(lr_rate), C.momentum_schedule(0.99))
-trainer = C.Trainer(q, (loss, None), [learner])
+trainer = C.Trainer(loss, (loss, None), [learner])
 
-for i in tqdm(range(10)):
-    v = np.random.uniform(size=(1,2))
-    v = noisy_moons
-    trainer.train_minibatch({q.arguments[0]:v})
+for i in tqdm(range(1000)):
+    # v = np.random.uniform(size=(1,2))
+    v = datasets.make_moons(n_samples=100, noise=.05)[0].astype(np.float32)
+    trainer.train_minibatch({loss.arguments[0]:v})
     if i%100 == 0:
-        print(trainer.previous_minibatch_loss_average)
+        print('\n',trainer.previous_minibatch_loss_average)
 
 import matplotlib.pyplot as plt
 # vv = np.random.uniform(size=(1000,2))
@@ -193,8 +189,8 @@ plt.scatter(vv[:,0], vv[:,1]);plt.show()
 x = q.eval({q.arguments[0]:vv})
 plt.scatter(x[:,0], x[:,1]);plt.show()
 
-# plt.hist(x[:,0]);plt.show()
-# plt.hist(x[:,1]);plt.show()
+plt.hist(x[:,0]);plt.show()
+plt.hist(x[:,1]);plt.show()
 
 # mm = multivariate_kl_divergence(C.input_variable(2))
 # mm.eval({mm.arguments[0]:np.random.normal(size=(1000,2))})

@@ -80,6 +80,38 @@ def __cntk_det__(m):
     return C.user_function(__cntk_class_det__(m))
 C.det = __cntk_det__
 
+class __cntk_class_slogdet__(UserFunction):
+    def __init__(self, arg, name:str='__cntk_class_slogdet__'):
+        super(__cntk_class_slogdet__, self).__init__([arg], name=name)
+
+        func = 'elementwise_grad' # 'grad' # 'jacobian' #
+        if func == 'grad':
+            func = grad
+        elif func == 'elementwise_grad':
+            func = elementwise_grad
+        elif func == 'jacobian':
+            func = jacobian
+        self.grad = func(LA.slogdet)
+    
+    def forward(self, argument, device=None, output_to_retain=None):
+        return argument, np.ascontiguousarray(np.stack(LA.slogdet(argument)).T)
+
+    def backward(self, state, root_gradients):
+        arg = state
+        return root_gradients.reshape(root_gradients.shape+(1,)) * np.ascontiguousarray(self.grad(arg))
+
+    def infer_outputs(self):
+        return [output_variable((2), self.inputs[0].dtype, self.inputs[0].dynamic_axes)]
+        # return [output_variable((1), self.inputs[0].dtype, self.inputs[0].dynamic_axes),
+        # output_variable((1), self.inputs[0].dtype, self.inputs[0].dynamic_axes)]
+    
+    @staticmethod
+    def deserialize(inputs, name, state):
+        return __cntk_class_slogdet__(inputs[0], name)
+def __cntk_slogdet__(m):
+    return C.user_function(__cntk_class_slogdet__(m))
+C.slogdet = __cntk_slogdet__
+
 # class MySigmoid(UserFunction):
 #     def __init__(self, arg, name='MySigmoid'):
 #         super(MySigmoid, self).__init__([arg], name=name)
@@ -144,3 +176,7 @@ if __name__ == '__main__':
     q = C.mvn_pdf(C.constant([0, 0]), C.constant([[1, 0], [0, 1]]))(C.input_variable(2, needs_gradient=True))
     q.eval({q.arguments[0]:np.random.normal(size=(100, 2))})
     q.grad({q.arguments[0]:np.random.normal(size=(100, 2))})
+
+    q = C.slogdet(C.input_variable((2,2),needs_gradient=True))
+    q.eval({q.arguments[0]:np.array([[[1,2],[3,4]]]*3,np.float32).reshape(3,2,2)})
+    q.grad({q.arguments[0]:np.array([[[1,2],[3,4]]]*3,np.float32).reshape(3,2,2)})
