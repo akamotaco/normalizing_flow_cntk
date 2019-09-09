@@ -54,7 +54,7 @@ class __cntk_class_det__(UserFunction):
     def __init__(self, arg, name:str='__cntk_class_det__'):
         super(__cntk_class_det__, self).__init__([arg], name=name)
 
-        func = 'elementwise_grad' # 'elementwise_grad' # 'jacobian' #
+        func = 'elementwise_grad' # 'grad' # 'jacobian' #
         if func == 'grad':
             func = grad
         elif func == 'elementwise_grad':
@@ -112,7 +112,7 @@ class __cntk_class_mvn_pdf__(UserFunction):
         # self.mvn_pdf = mvn_pdf
         self.mvn_pdf = multivariate_normal.pdf
 
-        func = 'elementwise_grad' # 'grad' # 'jacobian' #
+        func = 'elementwise_grad' # 'jacobian' # 'grad' #
         if func == 'grad':
             self.grad = grad(self.mvn_pdf)
         elif func == 'elementwise_grad':
@@ -127,13 +127,15 @@ class __cntk_class_mvn_pdf__(UserFunction):
         # return None, np.mean(np.zeros_like(X),axis=1).reshape(-1,1,1)
         return arguments, self.mvn_pdf(x, loc, scale).reshape(-1, 1).astype(np.float32)
 
-    def backward(self, state, root_gradients, variable):
+    def backward(self, state, root_gradients, variables):
         x, loc, scale = state
-        return root_gradients * self.grad(x, loc, scale)
+        _grad = root_gradients * self.grad(x, loc, scale)
+        for k in variables:
+            variables[k] = _grad
 
     def infer_outputs(self):
-        # return [output_variable(self.inputs[0].shape, self.inputs[0].dtype,
         return [output_variable((1), self.inputs[0].dtype, self.inputs[0].dynamic_axes)]
+        # return [output_variable((), self.inputs[0].dtype, self.inputs[0].dynamic_axes)]
 
     # def serialize(self):
         # return {'mvn_pdf' : self.mvn_pdf,
@@ -158,3 +160,39 @@ if __name__ == '__main__':
     q = C.mvn_pdf(C.constant([0, 0]), C.constant([[1, 0], [0, 1]]))(C.input_variable(2, needs_gradient=True))
     q.eval({q.arguments[0]:np.random.normal(size=(100, 2))})
     q.grad({q.arguments[0]:np.random.normal(size=(100, 2))})
+    # from IPython import embed;embed()
+
+
+# from cntk.ops.functions import UserFunction
+# from cntk import output_variable
+
+#region test
+
+# class MySigmoid(UserFunction):
+#     def __init__(self, arg, name='MySigmoid'):
+#         super(MySigmoid, self).__init__([arg], name=name)
+
+#     def forward(self, argument, device=None, outputs_to_retain=None):
+#         sigmoid_x = 1 / (1 + np.exp(-argument))
+#         return sigmoid_x, sigmoid_x
+
+#     def backward(self, state, root_gradients):
+#         sigmoid_x = state
+#         return root_gradients # * sigmoid_x * (1 - sigmoid_x)
+
+#     def infer_outputs(self):
+#         return [output_variable(self.inputs[0].shape, self.inputs[0].dtype,
+#             self.inputs[0].dynamic_axes)]
+
+#     @staticmethod
+#     def deserialize(inputs, name, state):
+#         return MySigmoid(inputs[0], name)
+
+# from cntk import user_function
+# s = user_function(MySigmoid(C.input_variable(1,needs_gradient=True)))
+# s.eval({s.arguments[0]:np.random.normal(size=(100, 1))})
+# s.grad({s.arguments[0]:np.random.normal(size=(100, 1))})
+
+# z = C.user_function(__cntk_class_mvn_pdf__(C.input_variable(2,needs_gradient=True), C.Constant([0,0]), C.Constant([[1,0],[0,1]])))
+# z.eval({z.arguments[0]:np.random.normal(size=(100, 2))})
+# z.grad({z.arguments[0]:np.random.normal(size=(100, 2))})

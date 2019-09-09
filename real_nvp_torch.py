@@ -20,8 +20,8 @@ class RealNVP(nn.Module):
         
         self.prior = prior
         self.mask = nn.Parameter(mask, requires_grad=False)
-        self.t = torch.nn.ModuleList([nett() for _ in range(len(masks))])
-        self.s = torch.nn.ModuleList([nets() for _ in range(len(masks))])
+        self.t = torch.nn.ModuleList([nett() for _ in range(len(mask))])
+        self.s = torch.nn.ModuleList([nets() for _ in range(len(mask))])
         
     def g(self, z):
         x = z
@@ -59,7 +59,7 @@ prior = distributions.MultivariateNormal(torch.zeros(2), torch.eye(2))
 flow = RealNVP(nets, nett, masks, prior)
 
 optimizer = torch.optim.Adam([p for p in flow.parameters() if p.requires_grad==True], lr=1e-4)
-for t in range(1):#5001):    
+for t in range(5001):
     noisy_moons = datasets.make_moons(n_samples=100, noise=.05)[0].astype(np.float32)
     loss = -flow.log_prob(torch.from_numpy(noisy_moons)).mean()
     
