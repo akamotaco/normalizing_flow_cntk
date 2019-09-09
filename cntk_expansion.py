@@ -103,13 +103,6 @@ C.det = __cntk_det__
 class __cntk_class_mvn_pdf__(UserFunction):
     def __init__(self, X, loc, scale, name: str = '__cntk_class_mvn_pdf__'):
         super(__cntk_class_mvn_pdf__, self).__init__([X, loc, scale], name=name)
-        # def mvn_pdf(X, mu, sig):
-        #     sqrt_det_2pi_sig = np.sqrt(2 * np.pi * LA.det(sig))
-        #     sig_inv = LA.inv(sig)
-        #     X = X[:, None, :] - mu[None, :, :]
-        #     return np.exp(-np.matmul(np.matmul(X, np.expand_dims(sig_inv, 0)),
-        #                 (X.transpose(0, 2, 1))) / 2) / sqrt_det_2pi_sig
-        # self.mvn_pdf = mvn_pdf
         self.mvn_pdf = multivariate_normal.pdf
 
         func = 'elementwise_grad' # 'jacobian' # 'grad' #
@@ -124,12 +117,12 @@ class __cntk_class_mvn_pdf__(UserFunction):
 
     def forward(self, arguments, device=None, outputs_to_retain=None):
         x, loc, scale = arguments
-        # return None, np.mean(np.zeros_like(X),axis=1).reshape(-1,1,1)
-        return arguments, self.mvn_pdf(x, loc, scale).reshape(-1, 1).astype(np.float32)
+        return arguments, self.mvn_pdf(x, loc, scale).astype(np.float32).reshape(-1, 1)
 
     def backward(self, state, root_gradients, variables):
         x, loc, scale = state
-        _grad = root_gradients * self.grad(x, loc, scale)
+        _grad = root_gradients * np.ascontiguousarray(self.grad(x, loc, scale).astype(np.float32))
+        
         for k in variables:
             variables[k] = _grad
 
@@ -137,18 +130,9 @@ class __cntk_class_mvn_pdf__(UserFunction):
         return [output_variable((1), self.inputs[0].dtype, self.inputs[0].dynamic_axes)]
         # return [output_variable((), self.inputs[0].dtype, self.inputs[0].dynamic_axes)]
 
-    # def serialize(self):
-        # return {'mvn_pdf' : self.mvn_pdf,
-                # 'grad' : self.grad}
-
     @staticmethod
     def deserialize(inputs, name, state):
-        # return _CNTK_mvn_pdf_(inputs[0], name)
-        print(inputs)
-        f = __cntk_class_mvn_pdf__(inputs[0], inputs[1], inputs[2], name)
-        # self.mvn_pdf = state['mnv_pdf']
-        # self.grad = state['grad']
-        return f
+        return __cntk_class_mvn_pdf__(inputs[0], inputs[1], inputs[2], name)
 
 def __cntk_mvn_pdf__(mu, sig, func: str = 'grad'):
     @C.Function
@@ -160,39 +144,3 @@ if __name__ == '__main__':
     q = C.mvn_pdf(C.constant([0, 0]), C.constant([[1, 0], [0, 1]]))(C.input_variable(2, needs_gradient=True))
     q.eval({q.arguments[0]:np.random.normal(size=(100, 2))})
     q.grad({q.arguments[0]:np.random.normal(size=(100, 2))})
-    # from IPython import embed;embed()
-
-
-# from cntk.ops.functions import UserFunction
-# from cntk import output_variable
-
-#region test
-
-# class MySigmoid(UserFunction):
-#     def __init__(self, arg, name='MySigmoid'):
-#         super(MySigmoid, self).__init__([arg], name=name)
-
-#     def forward(self, argument, device=None, outputs_to_retain=None):
-#         sigmoid_x = 1 / (1 + np.exp(-argument))
-#         return sigmoid_x, sigmoid_x
-
-#     def backward(self, state, root_gradients):
-#         sigmoid_x = state
-#         return root_gradients # * sigmoid_x * (1 - sigmoid_x)
-
-#     def infer_outputs(self):
-#         return [output_variable(self.inputs[0].shape, self.inputs[0].dtype,
-#             self.inputs[0].dynamic_axes)]
-
-#     @staticmethod
-#     def deserialize(inputs, name, state):
-#         return MySigmoid(inputs[0], name)
-
-# from cntk import user_function
-# s = user_function(MySigmoid(C.input_variable(1,needs_gradient=True)))
-# s.eval({s.arguments[0]:np.random.normal(size=(100, 1))})
-# s.grad({s.arguments[0]:np.random.normal(size=(100, 1))})
-
-# z = C.user_function(__cntk_class_mvn_pdf__(C.input_variable(2,needs_gradient=True), C.Constant([0,0]), C.Constant([[1,0],[0,1]])))
-# z.eval({z.arguments[0]:np.random.normal(size=(100, 2))})
-# z.grad({z.arguments[0]:np.random.normal(size=(100, 2))})
