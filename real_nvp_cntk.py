@@ -16,11 +16,11 @@ class RealNVP():
         self.t = [nett() for _ in range(mask.shape[0])]
         self.s = [nets() for _ in range(mask.shape[0])]
 
-        self.forward, self.log_det_J = self._forward(2)
-        self.reverse = self._reverse(2)
+        self.forward, self.log_det_J = self._normal_flow(2)
+        self.reverse = self._reverse_flow(2)
         self.loss = self._loss()
 
-    def _forward(self, input_dim):
+    def _normal_flow(self, input_dim):
         x = C.input_variable(input_dim, needs_gradient=True, name='input')
         z, sum_log_det_jacob = x, C.Constant(0, name='log_det_zero')
 
@@ -28,26 +28,25 @@ class RealNVP():
             z_ = self.mask[i] * z
             s = self.s[i](z_) * (1-self.mask[i])
             t = self.t[i](z_) * (1-self.mask[i])
-            z = (1 - self.mask[i]) * (z - t) * C.exp(-s) + z_
+            z = z_ + (1 - self.mask[i]) * (z * C.exp(s) + t)
             sum_log_det_jacob += C.reduce_sum(s)
         
         z = C.squeeze(z)
         return z, sum_log_det_jacob
     
-    def _reverse(self, input_dim):
-        x = C.input_variable(input_dim, needs_gradient=True, name='data_input')
+    def _reverse_flow(self, input_dim):
+        x = C.input_variable(input_dim, name='data_input')
 
-        for i in reversed(range(6)):
+        for i in reversed(range(len(self.t))):
             x_ = x * self.mask[i]
             s = self.s[i](x_)*(1 - self.mask[i])
             t = self.t[i](x_)*(1 - self.mask[i])
-            x = x_ + (1 - self.mask[i]) * (x * C.exp(s) + t)
+            x = x_ + (1 - self.mask[i]) * (x - t) * C.exp(-s)
         x = C.squeeze(x)
         return x
     
     def _loss(self):
-        log_q_k = C.log(self.prior.pdf(self.forward)) - self.log_det_J
-        return log_q_k
+        return -C.reduce_mean(C.log(self.prior.pdf(self.forward)) + self.log_det_J)
     
     def sample(self, batchSize): 
         z = self.prior.sample(batchSize).astype(np.float32)
@@ -64,9 +63,8 @@ masks = C.Constant(np.array([[0, 1], [1, 0]] * 3).astype(np.float32), name='mask
 prior = MultivariateNormalDiag(loc=[0., 0.], scale_diag=[1., 1.])
 flow = RealNVP(nets, nett, masks, prior)
 
-loss = -C.reduce_mean(flow.loss)
+loss = flow.loss
 
-# learner = C.adam(loss.parameters, C.learning_parameter_schedule_per_sample(1e-4), C.momentum_schedule_per_sample(0.9))
 learner = C.adam(loss.parameters, C.learning_parameter_schedule(1e-1), C.momentum_schedule(0.9))
 trainer = C.Trainer(loss, (loss, None), learner)
 
