@@ -68,7 +68,7 @@ class __cntk_class_det__(UserFunction):
     
     def backward(self, state, root_gradients):
         arg = state
-        return root_gradients.reshape(root_gradients.shape+(1,1)) * np.ascontiguousarray(self.grad(arg))
+        return root_gradients.reshape(root_gradients.shape+(1, 1)) * np.ascontiguousarray(self.grad(arg))
 
     def infer_outputs(self):
         return [output_variable((), self.inputs[0].dtype, self.inputs[0].dynamic_axes)]
@@ -96,11 +96,16 @@ class __cntk_class_slogdet__(UserFunction):
     def forward(self, argument, device=None, output_to_retain=None):
         return argument, np.ascontiguousarray(np.stack(LA.slogdet(argument)).T)
 
-    def backward(self, state, root_gradients):
+    def backward(self, state, root_gradients): # 수정 필요
         arg = state
+        # # from IPython import embed;embed()
+        # if len(root_gradients.shape) == 1:
+        #     root_gradients = root_gradients.reshape(1,-1)
+        # root_grad_logdet = root_gradients[:, 1] # logdet of slogdet
+        # return root_grad_logdet.reshape(root_grad_logdet.shape+(1,1)) * np.ascontiguousarray(self.grad(arg))
         return root_gradients.reshape(root_gradients.shape+(1,)) * np.ascontiguousarray(self.grad(arg))
 
-    def infer_outputs(self):
+    def infer_outputs(self): # 수정 필요
         return [output_variable((2), self.inputs[0].dtype, self.inputs[0].dynamic_axes)]
         # return [output_variable((1), self.inputs[0].dtype, self.inputs[0].dynamic_axes),
         # output_variable((1), self.inputs[0].dtype, self.inputs[0].dynamic_axes)]

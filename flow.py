@@ -28,8 +28,7 @@ def flow_forward(input_dim: int, act_func_pair: tuple = (None, None), batch_norm
     chunk['W_rot_mat'] = _W = C.parameter((input_dim, input_dim))
     _W.value = random_rotation_matrix = special_ortho_group.rvs(input_dim)
     _out = _ph@_W
-    # log_det_J += input_dim*C.log(C.abs(C.det(_W)))
-    log_det_J += input_dim*C.slogdet(_W)[1]
+    log_det_J += C.log(C.abs(C.det(_W))) # or # log_det_J += C.slogdet(_W)[1]
     
     _half_dim = input_dim//2
     _x1 = _out[:_half_dim]
