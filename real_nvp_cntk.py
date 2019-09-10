@@ -16,11 +16,11 @@ class RealNVP():
         self.t = [nett() for _ in range(mask.shape[0])]
         self.s = [nets() for _ in range(mask.shape[0])]
 
-        self.forward, self.log_det_J = self._normal_flow(2)
-        self.reverse = self._reverse_flow(2)
-        self.loss = self._loss()
+        self.forward, self.log_det_J = self.f(2)
+        self.reverse = self.g(2)
+        self.log_prob = self._log_prob()
 
-    def _normal_flow(self, input_dim):
+    def f(self, input_dim):
         x = C.input_variable(input_dim, needs_gradient=True, name='input')
         z, sum_log_det_jacob = x, C.Constant(0, name='log_det_zero')
 
@@ -29,12 +29,12 @@ class RealNVP():
             s = self.s[i](z_) * (1-self.mask[i])
             t = self.t[i](z_) * (1-self.mask[i])
             z = z_ + (1 - self.mask[i]) * (z - t) * C.exp(-s)
-            sum_log_det_jacob += C.reduce_sum(s)
+            sum_log_det_jacob -= C.reduce_sum(s)
 
         z = C.squeeze(z)
         return z, sum_log_det_jacob
 
-    def _reverse_flow(self, input_dim):
+    def g(self, input_dim):
         x = C.input_variable(input_dim, name='data_input')
 
         for i in range(len(self.t)):
@@ -45,11 +45,13 @@ class RealNVP():
         x = C.squeeze(x)
         return x
 
-    def _loss(self):
-        return -C.reduce_mean(C.log(self.prior.pdf(self.forward)) - self.log_det_J)
+    def _log_prob(self):
+        logp = self.log_det_J
+        return C.log(self.prior.pdf(self.forward)) + logp
 
     def sample(self, batchSize): 
         z = self.prior.sample(batchSize).astype(np.float32)
+        logp = C.log(self.prior.pdf(z))
         x = self.reverse(z)
         return x
 
@@ -63,7 +65,7 @@ if __name__ == '__main__':
     prior = MultivariateNormalDiag(loc=[0., 0.], scale_diag=[1., 1.])
     flow = RealNVP(nets, nett, masks, prior)
 
-    loss = flow.loss
+    loss = -C.reduce_mean(flow.log_prob)
 
     learner = C.adam(loss.parameters, C.learning_parameter_schedule(1e-1), C.momentum_schedule(0.9))
     trainer = C.Trainer(flow.forward, (loss, None), learner)

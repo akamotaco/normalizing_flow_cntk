@@ -62,10 +62,10 @@ for i in range(1, 2000 + 1):
     trainer.train_minibatch({kl.arguments[0]:s})
     if i % 100 == 0:
         print(trainer.previous_minibatch_loss_average)
-    if i % 500 == 0:
-        v = z_k.eval({z_k.arguments[0]:s})
-        plt.scatter(v[:, 0], v[:, 1], alpha=0.7)
-        plt.show()
+    # if i % 500 == 0:
+    #     v = z_k.eval({z_k.arguments[0]:s})
+    #     plt.scatter(v[:, 0], v[:, 1], alpha=0.7)
+    #     plt.show()
 
 v = z_k.eval({z_k.arguments[0]:s})
 plt.scatter(v[:, 0], v[:, 1], alpha=0.5, c='green')
