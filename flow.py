@@ -9,6 +9,8 @@ from tqdm import tqdm
 from sklearn import cluster, datasets, mixture
 noisy_moons = datasets.make_moons(n_samples=1000, noise=.05)[0].astype(np.float32)
 
+C.try_set_default_device(C.gpu(0))
+
 #%%
 def flow_forward(input_dim: int, act_func_pair: tuple = (None, None), batch_norm: bool = False):
     chunk = {}
@@ -19,11 +21,24 @@ def flow_forward(input_dim: int, act_func_pair: tuple = (None, None), batch_norm
     _out = _ph
 
     if batch_norm:
-        _bn = C.layers.BatchNormalization(name='batch_norm')(_ph)
-        chunk['scale'] = _bn.parameters[0]
-        chunk['bias'] = _bn.parameters[1]
+        # _bn = C.layers.BatchNormalization(name='batch_norm')(_ph)
+        # chunk['scale'] = _bn.parameters[0]
+        # chunk['bias'] = _bn.parameters[1]
+
+        chunk['mu'] = C.Constant(np.zeros(shape=input_dim))
+        chunk['var'] = C.Constant(np.ones(shape=input_dim))
+
+        _mu = C.reduce_mean(_ph, axis=C.Axis.default_batch_axis())
+        _var = C.reduce_mean(C.square(_ph-_mu), axis=C.Axis.default_batch_axis())
+        _eps = C.Constant(1e-7)
+
+        chunk['muB'] = _mu
+        chunk['varB'] = _var
+
+        _bn = (_ph-chunk['mu'])/C.sqrt(chunk['var']+_eps)
         _ph = _bn
-        log_det_J += input_dim*C.reduce_sum(C.log(C.abs(chunk['scale'])))
+
+        log_det_J += -0.5*C.reduce_sum(C.log((_var+_eps)))
 
     chunk['W_rot_mat'] = _W = C.parameter((input_dim, input_dim))
     _W.value = random_rotation_matrix = special_ortho_group.rvs(input_dim)
@@ -133,7 +148,7 @@ c_input = C.input_variable(c_dim)
 # c_block = KLF_forward(c_dim, batch_norm=True)
 c_block = []
 for i in range(6):
-    c_block.append(flow_forward(c_dim, batch_norm=False))
+    c_block.append(flow_forward(c_dim, batch_norm=True))
 
 # single = np.array([[1, 2]])
 # # multi = np.random.uniform(size=(100, 2))
@@ -143,8 +158,15 @@ for i in range(6):
 
 q = c_input
 log_det_J = C.Constant(0)
+bn = []
+bn_update = []
 for block in c_block:
     log_det_J += block[1](q)
+    if 'muB' in block[-1]: # batch norm
+        bn.append(block[-1]['muB'](q))
+        bn.append(block[-1]['varB'](q))
+        bn_update.append(block[-1]['mu'])
+        bn_update.append(block[-1]['var'])
     q = block[0](q)
 
 base_dist = MultivariateNormalDiag(loc=[0., 0.], scale_diag=[1., 1.])
@@ -170,7 +192,7 @@ from IPython import embed;embed()
 exit()
 
 
-lr_rate = 1e-2
+lr_rate = 1e-3
 learner = C.adam(loss.parameters, C.learning_parameter_schedule(lr_rate), C.momentum_schedule(0.99))
 trainer = C.Trainer(loss, (loss, None), [learner])
 
@@ -178,8 +200,18 @@ for i in tqdm(range(1000)):
     # v = np.random.uniform(size=(1,2))
     v = datasets.make_moons(n_samples=100, noise=.05)[0].astype(np.float32)
     trainer.train_minibatch({loss.arguments[0]:v})
+
+    # from IPython import embed;embed()
     if i%100 == 0:
         print('\n',trainer.previous_minibatch_loss_average)
+
+    if len(bn) > 0: # batch norm
+        result = C.combine(bn).eval({loss.arguments[0]:v})
+        result = list(result.values())
+        momentum = C.Constant(0.9)
+        for i in range(len(result)):
+            C.assign(bn_update[i],momentum*bn_update[i] + (1-momentum)*result[i]).eval()
+
 
 import matplotlib.pyplot as plt
 # vv = np.random.uniform(size=(1000,2))
