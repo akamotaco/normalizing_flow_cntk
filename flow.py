@@ -28,20 +28,23 @@ def flow_forward(input_dim: int, act_func_pair: tuple = (None, None), batch_norm
         chunk['mu'] = C.Constant(np.zeros(shape=input_dim))
         chunk['var'] = C.Constant(np.ones(shape=input_dim))
 
+        _eps = C.Constant(1e-7)
         _mu = C.reduce_mean(_ph, axis=C.Axis.default_batch_axis())
         _var = C.reduce_mean(C.square(_ph-_mu), axis=C.Axis.default_batch_axis())
-        _eps = C.Constant(1e-7)
 
         chunk['muB'] = _mu
         chunk['varB'] = _var
 
-        _bn = (_ph-chunk['mu'])/C.sqrt(chunk['var']+_eps)
+        # _bn = (_ph-chunk['mu'])/C.sqrt(chunk['var']+_eps)
+        _bn = C.sqrt(chunk['var']+_eps)*_ph + chunk['mu']
         _ph = _bn
 
         log_det_J += -0.5*C.reduce_sum(C.log((_var+_eps)))
+        # log_det_J += C.reduce_sum(C.log())
 
     chunk['W_rot_mat'] = _W = C.parameter((input_dim, input_dim))
     _W.value = random_rotation_matrix = special_ortho_group.rvs(input_dim)
+    # _W.value = np.roll(np.eye(input_dim),input_dim//2,axis=0)
     _out = _ph@_W
     log_det_J += C.log(C.abs(C.det(_W))) # or # log_det_J += C.slogdet(_W)[1]
     
@@ -70,7 +73,7 @@ def flow_forward(input_dim: int, act_func_pair: tuple = (None, None), batch_norm
 
     _s = C.exp(_log_s)
 
-    _y1 = _x1*_s + _t
+    _y1 = _s*_x1 + _t
     _y2 = _x2
 
     _Y = C.splice(_y1, _y2)
@@ -80,39 +83,39 @@ def flow_forward(input_dim: int, act_func_pair: tuple = (None, None), batch_norm
 
     return _Y, log_det_J, chunk
 
-# def flow_reverse(chunk):
-#     input_dim = chunk['input_dim']
-#     log_det_J = 0
-#     _half_dim = input_dim//2
+def flow_reverse(chunk):
+    input_dim = chunk['input_dim']
+    log_det_J = 0
+    _half_dim = input_dim//2
 
-#     _ph = C.placeholder(input_dim, name='place_holder')
-#     _log_s_func = chunk['log_s_func']
-#     _t_func = chunk['t_func']
+    _ph = C.placeholder(input_dim, name='place_holder')
+    _log_s_func = chunk['log_s_func']
+    _t_func = chunk['t_func']
 
-#     _y1, _y2 = _ph[:_half_dim], _ph[_half_dim:]
-#     _log_s = _log_s_func(_y2)
-#     _t = _t_func(_y2)
-#     _s = C.exp(_log_s)
-#     _x1 = (_y1-_t)/_s
-#     _x2 = _y2
-#     _X = C.splice(_x1, _x2)
+    _y1, _y2 = _ph[:_half_dim], _ph[_half_dim:]
+    _log_s = _log_s_func(_y2)
+    _t = _t_func(_y2)
+    _s = C.exp(_log_s)
+    _x1 = (_y1-_t)/_s
+    _x2 = _y2
+    _X = C.splice(_x1, _x2)
 
-#     log_det_J += C.reduce_sum(C.log(C.abs(_s)))
+    log_det_J += C.reduce_sum(C.log(C.abs(_s)))
 
-#     _w = chunk['W_rot_mat']
-#     chunk['W_rot_mat_inv'] = _inv_w = C.Constant(np.linalg.inv(_w.value), name='inv_W')
-#     _out = _inv_w@_X
-#     log_det_J += input_dim*C.log(C.det(_inv_w))
+    _w = chunk['W_rot_mat']
+    chunk['W_rot_mat_inv'] = _inv_w = C.Constant(np.linalg.inv(_w.value), name='inv_W')
+    _out = _X@_inv_w
+    log_det_J += input_dim*C.log(C.det(_inv_w))
 
-#     if 'scale' in chunk:
-#         _out -= chunk['bias']
-#         _out /= chunk['scale']
-#         log_det_J += input_dim*C.reduce_sum(C.log(C.abs(chunk['scale'])))
+    # if 'scale' in chunk:
+    #     _out -= chunk['bias']
+    #     _out /= chunk['scale']
+    #     log_det_J += input_dim*C.reduce_sum(C.log(C.abs(chunk['scale'])))
 
-#     _out -= chunk['b']
-#     _out @= _inv_w
+    # _out -= chunk['b']
+    # _out @= _inv_w
 
-#     return _out, log_det_J
+    return _out, log_det_J
 
 #%%
 # https://stats.stackexchange.com/questions/60680/kl-divergence-between-two-multivariate-gaussians
@@ -148,7 +151,8 @@ c_input = C.input_variable(c_dim)
 # c_block = KLF_forward(c_dim, batch_norm=True)
 c_block = []
 for i in range(6):
-    c_block.append(flow_forward(c_dim, batch_norm=True))
+    c_block.append(flow_forward(c_dim, batch_norm=False))
+
 
 # single = np.array([[1, 2]])
 # # multi = np.random.uniform(size=(100, 2))
@@ -193,12 +197,12 @@ exit()
 
 
 lr_rate = 1e-3
-learner = C.adam(loss.parameters, C.learning_parameter_schedule(lr_rate), C.momentum_schedule(0.99))
+learner = C.adam(loss.parameters, C.learning_parameter_schedule_per_sample(lr_rate), C.momentum_schedule(0.99))
 trainer = C.Trainer(loss, (loss, None), [learner])
 
-for i in tqdm(range(1000)):
+for i in tqdm(range(10000)):
     # v = np.random.uniform(size=(1,2))
-    v = datasets.make_moons(n_samples=100, noise=.05)[0].astype(np.float32)
+    v = datasets.make_moons(n_samples=1000, noise=.05)[0].astype(np.float32)
     trainer.train_minibatch({loss.arguments[0]:v})
 
     # from IPython import embed;embed()
@@ -222,6 +226,23 @@ plt.scatter(x[:,0], x[:,1]);plt.show()
 
 plt.hist(x[:,0]);plt.show()
 plt.hist(x[:,1]);plt.show()
+
+r_block = []
+for i in range(6):
+    r_block.append(flow_reverse(c_block[i][-1]))
+
+w = C.input_variable(2)
+for i in range(-1,-7,-1):
+    w = r_block[i][0](w)
+
+ww = w.eval({w.arguments[0]:x})
+www = w.eval({w.arguments[0]:np.random.normal(size=(1000,2))})
+
+plt.scatter(vv[:,0], vv[:,1], alpha=0.5, label='origin')
+plt.scatter(ww[:,0], ww[:,1], alpha=0.5, label='reverse')
+plt.scatter(www[:,0], www[:,1], alpha=0.5, label='generated')
+plt.legend()
+plt.show()
 
 # mm = multivariate_kl_divergence(C.input_variable(2))
 # mm.eval({mm.arguments[0]:np.random.normal(size=(1000,2))})
