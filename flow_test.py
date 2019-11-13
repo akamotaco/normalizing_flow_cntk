@@ -75,7 +75,7 @@ class RealNVP():
 
         _log_s2, _t2 = _log_s_func2(_y2), _t_func2(_y2)
 
-        _y1 = (_y1 - _t2) / C.exp(_log_s2)
+         _y1 = (_y1 - _t2) / C.exp(_log_s2)
 
         log_det_J -= C.reduce_sum(_log_s2)
 
