@@ -207,7 +207,6 @@ class __cntk_class_mvn_log_prob__(UserFunction):
 
     def infer_outputs(self):
         return [output_variable((1), self.inputs[0].dtype, self.inputs[0].dynamic_axes)]
-        # return [output_variable((), self.inputs[0].dtype, self.inputs[0].dynamic_axes)]
 
     @staticmethod
     def deserialize(inputs, name, state):
