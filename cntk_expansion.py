@@ -1,7 +1,7 @@
 import autograd.numpy as np
 import autograd.numpy.linalg as LA
 import cntk as C
-from autograd import elementwise_grad, grad, jacobian
+from autograd import elementwise_grad, grad, jacobian, holomorphic_grad
 from autograd.scipy.stats import multivariate_normal
 from cntk import output_variable
 from cntk.ops.functions import UserFunction
@@ -142,7 +142,7 @@ class __cntk_class_mvn_pdf__(UserFunction):
         super(__cntk_class_mvn_pdf__, self).__init__([X, loc, scale], name=name)
         self.mvn_pdf = multivariate_normal.pdf
 
-        func = 'elementwise_grad' # 'jacobian' # 'grad' #
+        func = 'elementwise_grad' #  'jacobian' # 'grad' #  
         if func == 'grad':
             self.grad = grad(self.mvn_pdf)
         elif func == 'elementwise_grad':
@@ -159,7 +159,7 @@ class __cntk_class_mvn_pdf__(UserFunction):
     def backward(self, state, root_gradients, variables):
         x, loc, scale = state
         _grad = root_gradients * np.ascontiguousarray(self.grad(x, loc, scale).astype(np.float32))
-        
+
         for k in variables:
             variables[k] = _grad
 
@@ -176,6 +176,48 @@ def __cntk_mvn_pdf__(mu, sig, func: str = 'grad'):
     def _(x): return C.user_function(__cntk_class_mvn_pdf__(x, mu, sig))
     return _
 C.mvn_pdf = __cntk_mvn_pdf__
+
+class __cntk_class_mvn_log_prob__(UserFunction):
+    def __init__(self, X, loc, scale, name: str = '__cntk_class_mvn_log_prob__'):
+        super(__cntk_class_mvn_log_prob__, self).__init__([X, loc, scale], name=name)
+        self.log_prob = multivariate_normal.logpdf
+
+        func = 'elementwise_grad' #  'jacobian' # 'holomorphic_grad' # 'grad' #  
+        if func == 'grad':
+            self.grad = grad(self.log_prob)
+        elif func == 'elementwise_grad':
+            self.grad = elementwise_grad(self.log_prob)
+        elif func == 'jacobian':
+            self.grad = jacobian(self.log_prob)
+        elif func == 'holomorphic_grad':
+            self.grad = holomorphic_grad(self.log_prob)
+        else:
+            raise ValueError('unknown function name:'+str(func))
+
+    def forward(self, arguments, device=None, outputs_to_retain=None):
+        x, loc, scale = arguments
+        return arguments, self.log_prob(x, loc, scale).astype(np.float32).reshape(-1, 1)
+
+    def backward(self, state, root_gradients, variables):
+        x, loc, scale = state
+        _grad = root_gradients * np.ascontiguousarray(self.grad(x, loc, scale).astype(np.float32))
+
+        for k in variables:
+            variables[k] = _grad
+
+    def infer_outputs(self):
+        return [output_variable((1), self.inputs[0].dtype, self.inputs[0].dynamic_axes)]
+        # return [output_variable((), self.inputs[0].dtype, self.inputs[0].dynamic_axes)]
+
+    @staticmethod
+    def deserialize(inputs, name, state):
+        return __cntk_class_mvn_log_prob__(inputs[0], inputs[1], inputs[2], name)
+
+def __cntk_mvn_log_prob__(mu, sig, func: str = 'grad'):
+    @C.Function
+    def _(x): return C.user_function(__cntk_class_mvn_log_prob__(x, mu, sig))
+    return _
+C.mvn_log_prob = __cntk_mvn_log_prob__
 
 if __name__ == '__main__':
     q = C.mvn_pdf(C.constant([0, 0]), C.constant([[1, 0], [0, 1]]))(C.input_variable(2, needs_gradient=True))

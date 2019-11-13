@@ -13,9 +13,13 @@ class MultivariateNormalDiag():
         self.shape = self.loc.shape
         self.mvn_pdf = C.mvn_pdf(C.constant(self.loc, name='loc'),
                                  C.constant(self.scale, name='scale'))
+        self.mvn_log_prob = C.mvn_log_prob(C.constant(self.loc, name='loc'),
+                                 C.constant(self.scale, name='scale'))
     def size(self):
         return self.loc.shape
     def sample(self, count):
         return np.random.multivariate_normal(self.loc, self.scale, count)
     def pdf(self, x):
         return self.mvn_pdf(x)
+    def log_prob(self, x):
+        return self.mvn_log_prob(x)
